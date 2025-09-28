@@ -7,7 +7,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from utils.stock_data import StockDataFetcher, get_popular_stocks, validate_symbol
+from utils.stock_data import StockDataFetcher, get_popular_stocks, validate_symbol, get_stock_market_info
+from utils.vn_stock_data import get_popular_vn_stocks, get_vn_stock_sectors
 from models.lstm_model import LSTMStockPredictor
 from models.prophet_model import ProphetStockPredictor
 from models.ensemble_model import EnsembleStockPredictor
@@ -32,6 +33,7 @@ class StockPredictionApp:
         """Display main menu options"""
         print("\n" + "="*60)
         print("🚀 ADVANCED STOCK PRICE PREDICTION SYSTEM 🚀")
+        print("🌍 International & 🇻🇳 Vietnamese Stocks")
         print("="*60)
         print("1. 📊 Fetch Stock Data")
         print("2. 🧠 Train LSTM Model")
@@ -39,21 +41,22 @@ class StockPredictionApp:
         print("4. 🎯 Train Ensemble Model")
         print("5. 🔮 Make Predictions")
         print("6. 📋 View Popular Stocks")
-        print("7. 📊 Show Data Statistics")
-        print("8. 💾 Export Results")
-        print("9. ❌ Exit")
+        print("7. 🇻🇳 Vietnamese Stock Sectors")
+        print("8. 📊 Show Data Statistics")
+        print("9. 💾 Export Results")
+        print("10. ❌ Exit")
         print("="*60)
     
     def fetch_stock_data(self):
-        """Fetch stock data from Yahoo Finance"""
-        print("\n📊 STOCK DATA FETCHER")
-        print("-" * 30)
+        """Fetch stock data from multiple sources (International + Vietnamese)"""
+        print("\n📊 UNIVERSAL STOCK DATA FETCHER")
+        print("-" * 40)
         
-        # Show popular stocks
-        popular = get_popular_stocks()
-        print("Popular stocks:", ", ".join(popular[:10]))
+        # Show popular stocks from both markets
+        print("🌍 Popular International: AAPL, GOOGL, MSFT, AMZN, TSLA, META, NVDA")
+        print("🇻🇳 Popular Vietnamese: VNM, VIC, VHM, BID, CTG, VCB, FPT, MWG")
         
-        symbol = input("\nEnter stock symbol (e.g., AAPL): ").strip().upper()
+        symbol = input("\nEnter stock symbol (e.g., AAPL, VNM, FPT): ").strip().upper()
         
         if not symbol:
             print("❌ Invalid symbol!")
@@ -76,13 +79,21 @@ class StockPredictionApp:
             
             print(f"✅ Successfully fetched {len(data)} days of data!")
             print(f"📅 Date range: {data.index[0].date()} to {data.index[-1].date()}")
-            print(f"💰 Current price: ${data['Close'].iloc[-1]:.2f}")
+            
+            # Show price with appropriate currency
+            if self.data_fetcher.is_vietnamese_stock:
+                print(f"💰 Current price: {data['Close'].iloc[-1]:,.0f} VND")
+            else:
+                print(f"💰 Current price: ${data['Close'].iloc[-1]:.2f}")
             
             # Show company info
             company_info = self.data_fetcher.get_company_info()
             if company_info:
                 print(f"🏢 Company: {company_info['company_name']}")
-                print(f"🏭 Sector: {company_info['sector']}")
+                if 'sector' in company_info:
+                    print(f"🏭 Sector: {company_info['sector']}")
+                if 'market' in company_info:
+                    print(f"🌍 Market: {company_info['market']}")
         else:
             print("❌ Failed to fetch data!")
     
@@ -239,18 +250,39 @@ class StockPredictionApp:
             print("❌ Invalid choice!")
     
     def view_popular_stocks(self):
-        """Display popular stock symbols"""
-        popular = get_popular_stocks()
-        
+        """Display popular stock symbols from both markets"""
         print("\n📋 POPULAR STOCK SYMBOLS")
-        print("-" * 30)
+        print("-" * 40)
         
-        for i in range(0, len(popular), 5):
-            row = popular[i:i+5]
+        # International stocks
+        print("🌍 INTERNATIONAL STOCKS:")
+        international = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'META', 'NVDA', 'NFLX', 'ADBE', 'CRM']
+        for i in range(0, len(international), 5):
+            row = international[i:i+5]
+            print("   " + "  ".join(f"{stock:>6}" for stock in row))
+        
+        print("\n🇻🇳 VIETNAMESE STOCKS:")
+        vn_stocks = get_popular_vn_stocks()[:15]  # Top 15
+        for i in range(0, len(vn_stocks), 5):
+            row = vn_stocks[i:i+5]
             print("   " + "  ".join(f"{stock:>6}" for stock in row))
     
+    def view_vn_stock_sectors(self):
+        """Display Vietnamese stock sectors"""
+        print("\n🇻🇳 VIETNAMESE STOCK SECTORS")
+        print("-" * 40)
+        
+        sectors = get_vn_stock_sectors()
+        
+        for sector, stocks in sectors.items():
+            print(f"\n📊 {sector}:")
+            # Display stocks in rows of 5
+            for i in range(0, len(stocks), 5):
+                row = stocks[i:i+5]
+                print("   " + "  ".join(f"{stock:>6}" for stock in row))
+    
     def show_data_statistics(self):
-        """Show statistics of current data"""
+        """Show statistics of current data with appropriate currency formatting"""
         if self.current_data is None:
             print("❌ Please fetch stock data first!")
             return
@@ -259,11 +291,19 @@ class StockPredictionApp:
         print("-" * 40)
         
         data = self.current_data
+        is_vn = self.data_fetcher.is_vietnamese_stock
         
         print(f"📅 Data Period: {data.index[0].date()} to {data.index[-1].date()}")
         print(f"📊 Total Days: {len(data)}")
-        print(f"💰 Price Range: ${data['Close'].min():.2f} - ${data['Close'].max():.2f}")
-        print(f"📈 Current Price: ${data['Close'].iloc[-1]:.2f}")
+        
+        # Format prices based on market
+        if is_vn:
+            print(f"💰 Price Range: {data['Close'].min():,.0f} - {data['Close'].max():,.0f} VND")
+            print(f"📈 Current Price: {data['Close'].iloc[-1]:,.0f} VND")
+        else:
+            print(f"💰 Price Range: ${data['Close'].min():.2f} - ${data['Close'].max():.2f}")
+            print(f"📈 Current Price: ${data['Close'].iloc[-1]:.2f}")
+            
         print(f"📊 Average Volume: {data['Volume'].mean():,.0f}")
         print(f"📉 Volatility (20d): {data['Volatility'].iloc[-1]:.4f}")
         
@@ -281,8 +321,20 @@ class StockPredictionApp:
         print(f"\n📊 Technical Indicators:")
         print(f"   RSI: {data['RSI'].iloc[-1]:.2f}")
         print(f"   MACD: {data['MACD'].iloc[-1]:.4f}")
-        print(f"   MA(20): ${data['MA_20'].iloc[-1]:.2f}")
-        print(f"   MA(50): ${data['MA_50'].iloc[-1]:.2f}")
+        
+        if is_vn:
+            print(f"   MA(20): {data['MA_20'].iloc[-1]:,.0f} VND")
+            print(f"   MA(50): {data['MA_50'].iloc[-1]:,.0f} VND")
+        else:
+            print(f"   MA(20): ${data['MA_20'].iloc[-1]:.2f}")
+            print(f"   MA(50): ${data['MA_50'].iloc[-1]:.2f}")
+        
+        # Vietnamese-specific info
+        if is_vn:
+            print(f"\n🇻🇳 Vietnamese Market Info:")
+            print(f"   Market: Vietnam Stock Exchange")
+            print(f"   Currency: Vietnamese Dong (VND)")
+            print(f"   Trading Hours: 9:00 - 15:00 (GMT+7)")
     
     def export_results(self):
         """Export data and predictions to CSV"""
@@ -319,14 +371,16 @@ class StockPredictionApp:
                 elif choice == "6":
                     self.view_popular_stocks()
                 elif choice == "7":
-                    self.show_data_statistics()
+                    self.view_vn_stock_sectors()
                 elif choice == "8":
-                    self.export_results()
+                    self.show_data_statistics()
                 elif choice == "9":
+                    self.export_results()
+                elif choice == "10":
                     print("\n👋 Thank you for using Stock Prediction System!")
                     break
                 else:
-                    print("❌ Invalid choice! Please enter 1-9.")
+                    print("❌ Invalid choice! Please enter 1-10.")
                 
                 input("\nPress Enter to continue...")
                 
